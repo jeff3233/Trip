@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="旅遊行程">
+  <meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" href="icon-192.png">
+  <title>旅遊行程</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+  <style>
+    :root {
+      --bg: #F2F4F7; --card: #FFFFFF; --text: #0F172A; --muted: #64748B; --line: #E2E8F0;
+      --field: #F1F5F9; --primary: #0369A1; --primary-soft: #E0F2FE; --accent: #C2410C;
+      --ok: #047857; --danger: #DC2626; --shadow: 0 1px 2px rgb(15 23 42 / .06), 0 4px 14px rgb(15 23 42 / .05);
+      --glass: rgb(242 244 247 / .82); --on-primary: #fff;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0B1220; --card: #151E2E; --text: #F1F5F9; --muted: #94A3B8; --line: #253247;
+        --field: #1E293B; --primary: #38BDF8; --primary-soft: rgb(56 189 248 / .14); --accent: #FB923C;
+        --ok: #34D399; --danger: #F87171; --shadow: none; --glass: rgb(11 18 32 / .82); --on-primary: #0B1220;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    [hidden] { display: none !important; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5;
+      -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none;
+      padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: none; touch-action: manipulation; text-align: inherit; }
+    input, textarea, select { font-size: 16px; } /* 防止 iOS 聚焦時自動放大 */
+    fieldset { border: 0; padding: 0; min-width: 0; }
+    :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 0 16px; }
+
+    /* ── 頂部 ── */
+    header { position: sticky; top: 0; z-index: 20; background: var(--glass);
+      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+      padding-top: env(safe-area-inset-top); border-bottom: 1px solid var(--line); }
+    .top { display: flex; align-items: center; gap: 8px; padding-top: 10px; }
+    .trip-btn { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 6px; }
+    .trip-btn b { font-size: 24px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .trip-btn .chev { color: var(--muted); width: 18px; height: 18px; }
+    .trip-btn:active { opacity: .6; }
+    .sync-badge { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 12px; font-weight: 600;
+      color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); padding: 2px 8px; border-radius: 999px; }
+    .sync-badge svg.i { width: 14px; height: 14px; }
+    .icon-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--primary); flex-shrink: 0; }
+    .icon-btn:active { background: var(--primary-soft); }
+
+    .tabs { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px 12px; margin: 0 -16px;
+      scrollbar-width: none; scroll-snap-type: x proximity; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex-shrink: 0; scroll-snap-align: start; min-width: 64px; min-height: 48px; padding: 6px 12px;
+      border-radius: 14px; background: var(--card); box-shadow: var(--shadow); border: 1px solid var(--line);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2;
+      transition: background .2s, color .2s; }
+    .tab b { font-size: 13px; }
+    .tab small { font-size: 11px; color: var(--muted); }
+    .tab[aria-selected="true"] { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+    .tab[aria-selected="true"] small { color: inherit; opacity: .8; }
+    .tab.add { border-style: dashed; box-shadow: none; background: transparent; color: var(--muted); }
+
+    /* ── 當天標題 ── */
+    .day-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 20px 0 8px; }
+    .day-head h2 { font-size: 20px; font-weight: 700; }
+    .day-head p { font-size: 14px; color: var(--muted); }
+    .day-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .pill { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; padding: 6px 10px; min-height: 32px;
+      border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .chip svg.i { width: 16px; height: 16px; }
+
+    /* ── 時間軸 ── */
+    #list { list-style: none; padding: 0; }
+    .spot { position: relative; padding-left: 52px; }
+    .spot::before { content: ""; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+    .spot:first-child::before { top: 22px; }
+    .spot:last-child::before { bottom: calc(100% - 22px); }
+    .dot { position: absolute; left: -2px; top: 0; width: 44px; height: 44px; display: grid; place-items: center; }
+    .dot span { position: relative; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      color: var(--c); background: var(--card); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent), 0 0 0 4px var(--bg); }
+    .dot span::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: color-mix(in srgb, var(--c) 12%, transparent); }
+    .done .dot span { background: var(--c); color: #fff; }
+    .done .card { opacity: .55; }
+    .done .title { text-decoration: line-through; }
+    .card { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 16px; box-shadow: var(--shadow);
+      border: 1px solid var(--line); padding: 4px 4px 4px 14px; min-height: 64px; transition: opacity .2s; }
+    .card-main { flex: 1; min-width: 0; padding: 8px 0; }
+    .card-main:active { opacity: .6; }
+    .meta { display: flex; gap: 8px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .time { color: var(--accent); }
+    .cost { color: var(--ok); }
+    .title { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+    .note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .nav-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; color: var(--primary); }
+    .nav-btn:active { background: var(--primary-soft); }
+    .grip { width: 32px; height: 44px; display: grid; place-items: center; color: var(--muted); cursor: grab; touch-action: none; }
+    .leg { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 0; font-size: 13px; color: var(--muted); text-decoration: none; }
+    .leg svg.i { width: 16px; height: 16px; }
+    .leg:active { color: var(--primary); }
+    .spot:last-child .leg { display: none; }
+    .spot:last-child { padding-bottom: 8px; }
+    .sortable-ghost { opacity: .35; }
+    .sortable-chosen .card { box-shadow: 0 10px 30px rgb(15 23 42 / .18); }
+
+    .empty { text-align: center; padding: 56px 24px; color: var(--muted); }
+    .empty svg.i { width: 44px; height: 44px; stroke-width: 1.5; color: var(--primary); margin-bottom: 12px; }
+    .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 4px; }
+
+    /* ── 底部操作列（拇指可及） ── */
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--glass);
+      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+      border-top: 1px solid var(--line); padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); }
+    .bar .wrap { display: flex; gap: 10px; }
+    .btn { min-height: 50px; padding: 0 18px; border-radius: 14px; font-size: 16px; font-weight: 600; text-align: center;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: transform .15s, opacity .15s; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { flex: 1; background: var(--primary); color: var(--on-primary); }
+    .btn-soft { background: var(--primary-soft); color: var(--primary); }
+    .btn-plain { background: var(--field); }
+    .btn-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+
+    /* ── 底部抽屜（原生 dialog） ── */
+    dialog.sheet { width: 100%; max-width: 520px; margin: auto auto 0; border: 0; border-radius: 20px 20px 0 0;
+      background: var(--card); color: var(--text); padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+      max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; }
+    dialog.sheet[open] { animation: up .28s cubic-bezier(.2,.8,.2,1); }
+    dialog.sheet::backdrop { background: rgb(0 0 0 / .4); }
+    @keyframes up { from { transform: translateY(100%); } }
+    .handle { width: 36px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 12px; }
+    .sheet h3 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+    .sheet h4 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 20px 0 8px; }
+    .field { display: block; margin-bottom: 12px; }
+    .field > span { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+    .field input, .field textarea, .field select { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid transparent;
+      border-radius: 12px; background: var(--field); resize: none; appearance: none; }
+    .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--primary); background: var(--card); }
+    .with-btn { position: relative; }
+    .with-btn textarea { padding-right: 84px; }
+    .paste { position: absolute; right: 6px; top: 6px; min-height: 36px; padding: 0 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      background: var(--primary-soft); color: var(--primary); display: inline-flex; align-items: center; gap: 4px; }
+    .paste svg.i { width: 16px; height: 16px; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; min-width: 0; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chips label { position: relative; }
+    .chips input { position: absolute; opacity: 0; pointer-events: none; }
+    .chips span { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px;
+      background: var(--field); font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+    .chips input:checked + span { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+    .chips input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .hint { font-size: 12px; color: var(--muted); margin: -4px 0 12px; }
+    .actions { display: flex; gap: 10px; margin-top: 8px; }
+    .actions .btn { flex: 1; }
+    .link-row { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--primary); text-decoration: none; min-height: 44px; margin-bottom: 4px; }
+
+    .sync-box { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--field); }
+    .sync-box p { flex: 1; font-size: 14px; }
+    .sync-box small { display: block; color: var(--muted); font-size: 12px; }
+    .sync-box .btn { min-height: 40px; padding: 0 14px; font-size: 14px; }
+    #trip-list { list-style: none; padding: 0; border-radius: 14px; overflow: hidden; background: var(--field); }
+    #trip-list li + li { border-top: 1px solid var(--line); }
+    .trip-item { width: 100%; min-height: 56px; padding: 8px 14px; display: flex; align-items: center; gap: 10px; }
+    .trip-item span { flex: 1; min-width: 0; }
+    .trip-item b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trip-item small { color: var(--muted); font-size: 12px; }
+    .trip-item svg.i { color: var(--primary); }
+    .trip-item:active { background: var(--line); }
+
+    .toast { position: fixed; left: 50%; bottom: calc(88px + env(safe-area-inset-bottom)); transform: translate(-50%, 16px);
+      background: #0F172A; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 500;
+      opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50; max-width: calc(100% - 32px); text-align: center; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-food" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
+    <symbol id="i-stay" viewBox="0 0 24 24"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></symbol>
+    <symbol id="i-shopping" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></symbol>
+    <symbol id="i-transit" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/></symbol>
+    <symbol id="i-sight" viewBox="0 0 24 24"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+    <symbol id="i-nav" viewBox="0 0 24 24"><path d="m3 11 19-9-9 19-2-8-8-2z"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+  </svg>
+
+  <header>
+    <div class="wrap">
+      <div class="top">
+        <button class="trip-btn" onclick="openTripSheet()" aria-label="切換或設定行程">
+          <b id="trip-name"></b><svg class="i chev"><use href="#i-chev"/></svg>
+          <span id="sync-badge" class="sync-badge" hidden><svg class="i"><use href="#i-cloud"/></svg>同步</span>
+        </button>
+        <button class="icon-btn" onclick="shareTrip()" aria-label="分享行程"><svg class="i"><use href="#i-share"/></svg></button>
+      </div>
+      <nav class="tabs" id="tabs" role="tablist" aria-label="天數"></nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="day-head">
+      <div>
+        <h2 id="day-heading"></h2>
+        <p id="day-label"></p>
+        <div id="day-meta" class="day-meta"></div>
+        <button id="sort-chip" class="chip" hidden onclick="sortByTime()"><svg class="i"><use href="#i-sort"/></svg>時間順序不一致，點此依時間排序</button>
+      </div>
+      <button class="icon-btn" onclick="openDaySheet()" aria-label="這一天的設定"><svg class="i"><use href="#i-more"/></svg></button>
+    </section>
+    <ol id="list"></ol>
+    <div id="empty" class="empty" hidden>
+      <svg class="i"><use href="#i-pin"/></svg>
+      <b>這一天還沒有行程</b>
+      在 Google Maps 按「分享」→ 複製連結，<br>再點下方「新增地點」貼上即可
+    </div>
+  </main>
+
+  <div class="bar">
+    <div class="wrap">
+      <button class="btn btn-soft" onclick="openDayRoute()" aria-label="開啟當天路線"><svg class="i"><use href="#i-route"/></svg>路線</button>
+      <button class="btn btn-primary" onclick="openSpotSheet()"><svg class="i"><use href="#i-plus"/></svg>新增地點</button>
+    </div>
+  </div>
+
+  <!-- 地點新增 / 編輯 -->
+  <dialog id="spot-sheet" class="sheet">
+    <form onsubmit="saveSpot(event)">
+      <div class="handle"></div>
+      <h3 id="spot-sheet-title">新增地點</h3>
+      <label class="field">
+        <span>地點名稱或 Google Maps 連結</span>
+        <div class="with-btn">
+          <textarea id="f-place" rows="2" placeholder="例：淺草寺，或貼上 Google Maps 分享連結"></textarea>
+          <button type="button" class="paste" onclick="pasteClipboard()"><svg class="i"><use href="#i-paste"/></svg>貼上</button>
+        </div>
+      </label>
+      <div class="row">
+        <label class="field"><span>時間</span><input id="f-time" type="time"></label>
+        <label class="field"><span>花費（<b id="f-currency"></b>）</span><input id="f-cost" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+      </div>
+      <label class="field"><span>備註</span><input id="f-note" placeholder="如：先領號碼牌" enterkeyhint="done"></label>
+      <fieldset class="field"><span>分類</span><div class="chips" id="f-cat"></div></fieldset>
+      <a id="f-maplink" class="link-row" target="_blank" rel="noopener noreferrer" hidden><svg class="i"><use href="#i-ext"/></svg>在 Google Maps 開啟</a>
+      <div class="actions">
+        <button type="button" id="f-delete" class="btn btn-danger" onclick="deleteSpot()" hidden>刪除</button>
+        <button type="button" class="btn btn-plain" onclick="this.closest('dialog').close()">取消</button>
+        <button class="btn btn-primary">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 天數設定 -->
+  <dialog id="day-sheet" class="sheet">
+    <form onsubmit="saveDay(event)">
+      <div class="handle"></div>
+      <h3 id="day-sheet-title">這一天</h3>
+      <label class="field"><span>日期</span><input id="d-date" type="date"></label>
+      <label class="field"><span>小標題（選填）</span><input id="d-label" placeholder="如：淺草・晴空塔" enterkeyhint="done"></label>
+      <p class="hint">新增天數時會自動接續前一天的日期。</p>
+      <div class="actions">
+        <button type="button" class="btn btn-danger" onclick="deleteDay()">刪除這天</button>
+        <button type="button" class="btn btn-plain" onclick="this.closest('dialog').close()">取消</button>
+        <button class="btn btn-primary">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 行程設定 / 切換 -->
+  <dialog id="trip-sheet" class="sheet">
+    <form onsubmit="saveTripSettings(event)">
+      <div class="handle"></div>
+      <h3>行程設定</h3>
+      <div class="row">
+        <label class="field" style="flex:2"><span>行程名稱</span><input id="t-title" enterkeyhint="done"></label>
+        <label class="field"><span>幣別</span>
+          <select id="t-currency">
+            <option>TWD</option><option>JPY</option><option>KRW</option><option>USD</option><option>EUR</option>
+            <option>THB</option><option>HKD</option><option>CNY</option><option>SGD</option><option>VND</option><option>GBP</option><option>AUD</option>
+          </select>
+        </label>
+      </div>
+      <div class="sync-box">
+        <p id="t-sync-text"></p>
+        <button type="button" id="t-sync-btn" class="btn btn-soft" onclick="enableSync()">開啟同步</button>
+      </div>
+      <div class="actions">
+        <button type="button" id="t-delete" class="btn btn-danger" onclick="deleteTrip()">刪除行程</button>
+        <button class="btn btn-primary">儲存</button>
+      </div>
+
+      <h4>我的行程</h4>
+      <ul id="trip-list"></ul>
+      <div class="actions"><button type="button" class="btn btn-soft" onclick="newTrip()"><svg class="i"><use href="#i-plus"/></svg>新增行程</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // ════════ 多人同步設定 ════════
+    // 填入 Firebase 設定後即可多人即時共同編輯；保持 null 則只能分享「副本」。
+    // 取得方式見 README.md「開啟多人同步」。
+    const FIREBASE_CONFIG = null;
+    /* 範例：
+    const FIREBASE_CONFIG = {
+      apiKey: "AIza...",
+      authDomain: "my-trip-xxxx.firebaseapp.com",
+      projectId: "my-trip-xxxx",
+      appId: "1:1234:web:abcd"
+    };
+    */
+
+    const $ = s => document.querySelector(s);
+    const STORE_KEY = 'trip-planner-v2';
+    const WEEK = '日一二三四五六';
+    const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+    const CATEGORIES = [
+      { type: 'food', label: '美食', color: '#EA580C', keywords: ['餐廳', '食', '咖啡', 'cafe', '早餐', '拉麵', '燒肉', '夜市', '壽司', '居酒屋', '甜點', 'bar', '市場', '丼', '麵'] },
+      { type: 'stay', label: '住宿', color: '#7C3AED', keywords: ['飯店', '酒店', '民宿', '旅店', 'hotel', 'hostel', 'inn', '露營', '旅館'] },
+      { type: 'shopping', label: '購物', color: '#DB2777', keywords: ['百貨', '商場', 'outlet', '市集', '逛街', '超市', '免稅', '商店街', 'bic camera', 'donki', '唐吉'] },
+      { type: 'transit', label: '交通', color: '#2563EB', keywords: ['機場', '車站', '捷運', '地鐵', '高鐵', '巴士', 'terminal', 'airport', 'station', '站'] },
+      { type: 'sight', label: '景點', color: '#059669', keywords: [] }
+    ];
+    const categoryOf = s => CATEGORIES.find(c => c.type === s.cat)
+      || CATEGORIES.find(c => c.keywords.some(k => s.title.toLowerCase().includes(k))) || CATEGORIES.at(-1);
+
+    // 分享連結來自別人，內容一律跳脫，網址只允許 http(s)，避免 XSS
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const searchUrl = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+    const safeUrl = (u, q) => /^https?:\/\//i.test(u || '') ? u : searchUrl(q);
+    const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), b => b.toString(16).padStart(2, '0')).join('');
+
+    const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const fmtDate = s => {
+      if (!ISO.test(s || '')) return s || '';   // 舊資料可能是 "11/9"
+      const d = new Date(s + 'T00:00');
+      return `${d.getMonth() + 1}/${d.getDate()}（${WEEK[d.getDay()]}）`;
+    };
+    const money = n => {
+      try { return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: trip.currency, maximumFractionDigits: 0 }).format(n); }
+      catch (e) { return `${trip.currency} ${Math.round(n)}`; }
+    };
+    const sumCost = spots => spots.reduce((a, s) => a + (+s.cost || 0), 0);
+
+    const emptyDay = (date = '') => ({ id: newId(), date, label: '', spots: [] });
+    const sampleTrip = () => ({
+      id: newId(), title: '東京秋季漫遊', currency: 'JPY',
+      days: [
+        { id: newId(), date: '2026-11-09', label: '抵達・淺草', spots: [
+          { id: newId(), title: '成田國際機場', time: '11:00', note: '入境後領取 Skyliner 車票', cost: 2580, mapUrl: searchUrl('成田國際機場') },
+          { id: newId(), title: '淺草寺 雷門', time: '14:30', note: '參拜拍大紅燈籠', mapUrl: searchUrl('淺草寺') },
+          { id: newId(), title: '晴空塔', time: '18:00', note: '欣賞東京夜景', cost: 3100, mapUrl: searchUrl('晴空塔') }
+        ]},
+        { id: newId(), date: '2026-11-10', label: '', spots: [
+          { id: newId(), title: '築地場外市場', time: '09:00', note: '玉子燒與海鮮丼', cost: 4000, mapUrl: searchUrl('築地場外市場') },
+          { id: newId(), title: 'SHIBUYA SKY', time: '16:30', note: '提前訂票看落日', cost: 2500, mapUrl: searchUrl('SHIBUYA SKY') }
+        ]}
+      ]
+    });
+
+    const valid = d => d && Array.isArray(d.days) && d.days.length > 0;
+    function normalize(t) {
+      t.id ||= newId();
+      t.title ||= '我的旅行';
+      t.currency ||= 'TWD';
+      if (!valid(t)) t.days = [emptyDay()];
+      t.days.forEach(d => {
+        d.id ||= newId();
+        d.spots = Array.isArray(d.spots) ? d.spots : [];
+        d.spots.forEach(s => { s.id ||= newId(); s.title = String(s.title || '未命名地點'); });
+      });
+      t.currentDayIndex = Math.min(Math.max(+t.currentDayIndex || 0, 0), t.days.length - 1);
+      return t;
+    }
+    // 只有這些欄位會分享 / 上雲；目前看哪一天（currentDayIndex）每個人各自記
+    const payload = t => JSON.parse(JSON.stringify({ title: t.title, currency: t.currency, days: t.days, updatedAt: t.updatedAt || Date.now() }));
+
+    // ── 載入：本機行程清單 + 網址帶來的行程 ──
+    function loadStore() {
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) {}
+      if (!s || typeof s.trips !== 'object') {
+        s = { currentId: null, trips: {} };
+        try { const old = JSON.parse(localStorage.getItem('trip-planner-v1')); if (valid(old)) { normalize(old); s.trips[old.id] = old; s.currentId = old.id; } } catch (e) {}
+      }
+      Object.values(s.trips).forEach(normalize);
+
+      const h = location.hash;
+      if (h.startsWith('#data=')) {          // 副本連結：存成本機行程（同一份連結再開只會更新，不會重複）
+        try {
+          const d = JSON.parse(LZString.decompressFromEncodedURIComponent(h.slice(6)));
+          if (valid(d)) {
+            normalize(d);
+            const mine = s.trips[d.id];
+            if (!mine || !mine.cloud) s.trips[d.id] = { ...d, currentDayIndex: mine?.currentDayIndex || 0 };
+            s.currentId = d.id;
+          }
+        } catch (e) {}
+      } else if (h.startsWith('#trip=')) {   // 同步連結：從雲端載入
+        const id = h.slice(6).replace(/[^a-z0-9]/gi, '');
+        if (id) {
+          s.trips[id] ||= { id, title: '載入中…', currency: 'TWD', cloud: true, pending: true, days: [emptyDay()], currentDayIndex: 0 };
+          s.currentId = id;
+        }
+      }
+      if (!Object.keys(s.trips).length) { const t = normalize(sampleTrip()); s.trips[t.id] = t; }
+      if (!s.trips[s.currentId]) s.currentId = Object.keys(s.trips)[0];
+      return s;
+    }
+
+    let store = loadStore();
+    let trip = store.trips[store.currentId];
+    const curDay = () => trip.days[trip.currentDayIndex];
+
+    function shareLink() {
+      const base = location.href.split('#')[0];
+      return trip.cloud ? `${base}#trip=${trip.id}`
+        : `${base}#data=${LZString.compressToEncodedURIComponent(JSON.stringify({ id: trip.id, ...payload(trip) }))}`;
+    }
+    // 存本機 + 更新網址（加到主畫面時會帶著目前行程）
+    function persist() {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { toast('手機儲存空間不足，資料可能沒存到'); }
+      history.replaceState(null, '', shareLink());
+    }
+    function save() {
+      trip.updatedAt = Date.now();
+      persist();
+      pushCloud(trip);
+    }
+
+    function toast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+
+    // ════════ 雲端同步（Firebase Firestore） ════════
+    let db = null, unsub = null;
+    const pushTimers = {};
+    const loadScript = src => new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.append(s); });
+
+    async function initCloud() {
+      if (!FIREBASE_CONFIG) {
+        if (trip.pending) toast('這是同步行程連結，但此網站尚未設定同步功能');
+        return;
+      }
+      try {
+        await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+        await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js');
+        firebase.initializeApp(FIREBASE_CONFIG);
+        db = firebase.firestore();
+        await db.enablePersistence({ synchronizeTabs: true }).catch(() => {});   // 國外沒網路時也能看、能改，回線後自動上傳
+        subscribe();
+      } catch (e) {
+        console.error(e);
+        toast('同步服務連線失敗，先以離線模式使用');
+      }
+    }
+
+    function subscribe() {
+      unsub?.(); unsub = null;
+      if (!db || !trip.cloud) return;
+      const id = trip.id;
+      unsub = db.collection('trips').doc(id).onSnapshot(snap => {
+        if (snap.metadata.hasPendingWrites) return;
+        const t = store.trips[id];
+        if (!t) return;
+        if (!snap.exists) { if (t.pending) toast('找不到這個共享行程，連結可能有誤'); return; }
+        const d = snap.data();
+        if (!valid(d)) return;
+        delete t.pending;
+        Object.assign(t, d);
+        normalize(t);
+        persist();
+        if (t === trip && !document.querySelector('dialog[open]')) render();
+        else if (t === trip) renderHeader();
+      }, err => { console.error(err); toast('同步失敗：' + (err.code || '請檢查網路')); });
+    }
+
+    // ponytail: 整份行程「後寫入者為準」，兩人同一秒改不同地點可能蓋掉一方；真的常撞再改成每個地點一筆文件
+    function pushCloud(t) {
+      if (!db || !t.cloud || t.pending) return;
+      const data = payload(t);
+      clearTimeout(pushTimers[t.id]);
+      pushTimers[t.id] = setTimeout(() => db.collection('trips').doc(t.id).set(data).catch(e => toast('同步失敗：' + (e.code || '稍後再試'))), 400);
+    }
+
+    async function enableSync() {
+      if (!FIREBASE_CONFIG) return alert('多人同步需要先設定 Firebase（免費，約 5 分鐘），步驟請看 README.md「開啟多人同步」。\n\n設定好之前，分享出去的是「副本」：對方看得到，但雙方的修改不會互相同步。');
+      if (!db) return toast('同步服務尚未連線，請確認網路');
+      trip.cloud = true;
+      trip.updatedAt = Date.now();
+      try { await db.collection('trips').doc(trip.id).set(payload(trip)); }
+      catch (e) { trip.cloud = false; return toast('開啟失敗：' + (e.code || '請檢查 Firebase 規則')); }
+      persist(); subscribe(); renderHeader(); fillTripSheet();
+      toast('已開啟同步，按右上角分享給旅伴即可一起編輯');
+    }
+
+    // ════════ 渲染 ════════
+    function render() {
+      renderHeader();
+      renderTabs();
+      renderDay();
+    }
+
+    function renderHeader() {
+      document.title = trip.title;
+      $('#trip-name').textContent = trip.title;
+      $('#sync-badge').hidden = !trip.cloud;
+    }
+
+    function renderTabs() {
+      const tabs = $('#tabs');
+      tabs.innerHTML = trip.days.map((d, i) => `
+        <button class="tab" role="tab" aria-selected="${i === trip.currentDayIndex}" data-i="${i}">
+          <b>Day ${i + 1}</b><small>${esc(fmtDate(d.date).replace(/（.）/, '') || '未定')}</small>
+        </button>`).join('') +
+        `<button class="tab add" onclick="addDay()" aria-label="新增一天"><svg class="i"><use href="#i-plus"/></svg></button>`;
+      tabs.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    }
+
+    function renderDay() {
+      const day = curDay();
+      $('#day-heading').textContent = `Day ${trip.currentDayIndex + 1}${day.date ? ' · ' + fmtDate(day.date) : ''}`;
+      $('#day-label').textContent = day.label || '';
+
+      const done = day.spots.filter(s => s.done).length;
+      const dayCost = sumCost(day.spots);
+      const tripCost = trip.days.reduce((a, d) => a + sumCost(d.spots), 0);
+      $('#day-meta').innerHTML = [
+        day.spots.length && `<span class="pill">已去 ${done}/${day.spots.length}</span>`,
+        dayCost && `<span class="pill">本日 ${money(dayCost)}</span>`,
+        tripCost && `<span class="pill">全程 ${money(tripCost)}</span>`
+      ].filter(Boolean).join('');
+
+      const times = day.spots.map(s => s.time).filter(Boolean);
+      $('#sort-chip').hidden = times.every((t, i) => !i || times[i - 1] <= t);
+
+      $('#empty').hidden = day.spots.length > 0;
+      $('#list').innerHTML = day.spots.map((s, i) => {
+        const cat = categoryOf(s);
+        const next = day.spots[i + 1];
+        const legUrl = next ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(s.title)}&destination=${encodeURIComponent(next.title)}` : '';
+        return `
+        <li class="spot ${s.done ? 'done' : ''}" data-id="${esc(s.id)}" style="--c:${cat.color}">
+          <button class="dot" data-done="${esc(s.id)}" aria-pressed="${!!s.done}" aria-label="${s.done ? '取消已去過' : '標記為已去過'}：${esc(s.title)}">
+            <span><svg class="i"><use href="#i-${s.done ? 'check' : cat.type}"/></svg></span>
+          </button>
+          <div class="card">
+            <button class="card-main" data-edit="${esc(s.id)}">
+              ${s.time || +s.cost ? `<div class="meta">${s.time ? `<span class="time">${esc(s.time)}</span>` : ''}${+s.cost ? `<span class="cost">${esc(money(+s.cost))}</span>` : ''}</div>` : ''}
+              <div class="title">${esc(s.title)}</div>
+              ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+            </button>
+            <a class="nav-btn" href="${esc(safeUrl(s.mapUrl, s.title))}" target="_blank" rel="noopener noreferrer" aria-label="在 Google Maps 開啟 ${esc(s.title)}"><svg class="i"><use href="#i-nav"/></svg></a>
+            <span class="grip" aria-label="拖曳排序"><svg class="i"><use href="#i-grip"/></svg></span>
+          </div>
+          ${next ? `<a class="leg" href="${legUrl}" target="_blank" rel="noopener noreferrer"><svg class="i"><use href="#i-down"/></svg>到「${esc(next.title)}」的路線</a>` : ''}
+        </li>`;
+      }).join('');
+    }
+
+    // ════════ 事件 ════════
+    $('#tabs').addEventListener('click', e => {
+      const b = e.target.closest('[data-i]');
+      if (!b) return;
+      trip.currentDayIndex = +b.dataset.i;
+      persist(); render();
+    });
+    $('#list').addEventListener('click', e => {
+      const edit = e.target.closest('[data-edit]');
+      if (edit) return openSpotSheet(edit.dataset.edit);
+      const dot = e.target.closest('[data-done]');
+      if (dot) {
+        const s = curDay().spots.find(x => x.id === dot.dataset.done);
+        s.done = !s.done;
+        navigator.vibrate?.(10);
+        save(); renderDay();
+      }
+    });
+    // 點抽屜外的暗色背景關閉
+    // 關閉時重畫，補上抽屜開著期間旅伴同步過來的修改
+    document.querySelectorAll('dialog').forEach(d => {
+      d.addEventListener('click', e => { if (e.target === d) d.close(); });
+      d.addEventListener('close', render);
+    });
+
+    new Sortable($('#list'), {
+      handle: '.grip', animation: 180, ghostClass: 'sortable-ghost',
+      onEnd() {
+        const day = curDay();
+        const byId = Object.fromEntries(day.spots.map(s => [s.id, s]));
+        day.spots = [...$('#list').children].map(li => byId[li.dataset.id]).filter(Boolean);
+        save(); renderDay();
+      }
+    });
+
+    // ── Google Maps 輸入解析 ──
+    function parseInput(input) {
+      input = input.trim();
+      const url = (input.match(/https?:\/\/\S+/) || [])[0] || '';
+      let name = url ? input.replace(url, '').replace(/在\s*Google\s*地圖上查看\s*[:：]?/i, '').trim().split('\n')[0].trim() : input;
+      if (!name && url) {
+        const m = url.match(/\/place\/([^\/@?#]+)/) || url.match(/[?&](?:q|query)=([^&]+)/);
+        if (m) try { name = decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) {}
+      }
+      return { name, url };
+    }
+
+    // ════════ 地點 ════════
+    let editingId = null;
+    $('#f-cat').innerHTML = [{ type: '', label: '自動' }, ...CATEGORIES]
+      .map(c => `<label><input type="radio" name="cat" value="${c.type}"><span>${c.label}</span></label>`).join('');
+
+    function openSpotSheet(id = null) {
+      editingId = id;
+      const s = id && curDay().spots.find(x => x.id === id);
+      $('#spot-sheet-title').textContent = s ? '編輯地點' : `新增到 Day ${trip.currentDayIndex + 1}`;
+      $('#f-place').value = s ? s.title : '';
+      $('#f-time').value = s?.time || '';
+      $('#f-cost').value = s?.cost || '';
+      $('#f-note').value = s?.note || '';
+      $('#f-currency').textContent = trip.currency;
+      document.querySelector(`#f-cat input[value="${s?.cat || ''}"]`).checked = true;
+      $('#f-delete').hidden = !s;
+      $('#f-maplink').hidden = !s;
+      if (s) $('#f-maplink').href = safeUrl(s.mapUrl, s.title);
+      $('#spot-sheet').showModal();
+      if (!s) $('#f-place').focus();
+    }
+
+    async function pasteClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) $('#f-place').value = text;
+      } catch (e) {
+        $('#f-place').focus();
+        toast('請長按輸入框選擇「貼上」');
+      }
+    }
+
+    function saveSpot(e) {
+      e.preventDefault();
+      const raw = $('#f-place').value;
+      if (!raw.trim()) return toast('請輸入地點名稱或貼上連結');
+      let { name, url } = parseInput(raw);
+      if (!name) name = '未命名地點';
+
+      const day = curDay();
+      const fields = {
+        title: name, time: $('#f-time').value, note: $('#f-note').value.trim(),
+        cost: Math.max(0, +$('#f-cost').value || 0), cat: document.querySelector('#f-cat input:checked').value
+      };
+      const s = editingId && day.spots.find(x => x.id === editingId);
+      if (s) {
+        if (url) s.mapUrl = url;
+        else if (name !== s.title) s.mapUrl = searchUrl(name);
+        Object.assign(s, fields);
+      } else {
+        day.spots.push({ id: newId(), ...fields, mapUrl: url || searchUrl(name) });
+        toast(editingId ? '原地點已被旅伴刪除，已另存為新地點' : name === '未命名地點' ? '已加入，點卡片可修改名稱' : '已加入行程');
+      }
+      $('#spot-sheet').close();
+      save(); renderDay();
+    }
+
+    function deleteSpot() {
+      const day = curDay();
+      const i = day.spots.findIndex(x => x.id === editingId);
+      if (i < 0) return $('#spot-sheet').close();
+      if (!confirm(`刪除「${day.spots[i].title}」？`)) return;
+      day.spots.splice(i, 1);
+      $('#spot-sheet').close();
+      save(); renderDay();
+      toast('已刪除');
+    }
+
+    function sortByTime() {
+      curDay().spots.sort((a, b) => (a.time || '~').localeCompare(b.time || '~'));
+      save(); renderDay();
+      toast('已依時間排序');
+    }
+
+    // ════════ 天數 ════════
+    function addDay() {
+      const last = trip.days.at(-1);
+      let date = '';
+      if (ISO.test(last?.date || '')) {
+        const d = new Date(last.date + 'T00:00');
+        d.setDate(d.getDate() + 1);
+        date = isoDate(d);
+      }
+      trip.days.push(emptyDay(date));
+      trip.currentDayIndex = trip.days.length - 1;
+      save(); render();
+    }
+
+    function openDaySheet() {
+      const day = curDay();
+      $('#day-sheet-title').textContent = `Day ${trip.currentDayIndex + 1} 設定`;
+      $('#d-date').value = ISO.test(day.date || '') ? day.date : '';
+      $('#d-label').value = day.label || '';
+      $('#day-sheet').showModal();
+    }
+
+    function saveDay(e) {
+      e.preventDefault();
+      const day = curDay();
+      day.date = $('#d-date').value || day.date || '';
+      day.label = $('#d-label').value.trim();
+      $('#day-sheet').close();
+      save(); render();
+    }
+
+    function deleteDay() {
+      if (trip.days.length === 1) return toast('至少要保留一天');
+      const day = curDay();
+      if (day.spots.length && !confirm(`Day ${trip.currentDayIndex + 1} 有 ${day.spots.length} 個地點，確定刪除？`)) return;
+      trip.days.splice(trip.currentDayIndex, 1);
+      trip.currentDayIndex = Math.max(0, trip.currentDayIndex - 1);
+      $('#day-sheet').close();
+      save(); render();
+    }
+
+    // ════════ 多個行程 ════════
+    function fillTripSheet() {
+      $('#t-title').value = trip.title;
+      $('#t-currency').value = trip.currency;
+      if (!$('#t-currency').value) $('#t-currency').add(new Option(trip.currency), 0), $('#t-currency').value = trip.currency;
+      $('#t-sync-text').innerHTML = trip.cloud
+        ? '多人同步：已開啟<small>分享連結給旅伴，大家改的內容會即時同步</small>'
+        : '多人同步：未開啟<small>目前分享出去的是副本，雙方修改不會互通</small>';
+      $('#t-sync-btn').hidden = !!trip.cloud;
+      $('#t-delete').textContent = trip.cloud ? '從列表移除' : '刪除行程';
+      $('#trip-list').innerHTML = Object.values(store.trips)
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .map(t => `<li><button type="button" class="trip-item" data-trip="${esc(t.id)}">
+          <span><b>${esc(t.title)}</b><small>${t.days.length} 天${t.days[0]?.date ? ' · ' + esc(fmtDate(t.days[0].date)) + ' 出發' : ''}${t.cloud ? ' · 同步中' : ''}</small></span>
+          ${t.id === trip.id ? '<svg class="i"><use href="#i-check"/></svg>' : ''}
+        </button></li>`).join('');
+    }
+
+    function openTripSheet() {
+      fillTripSheet();
+      $('#trip-sheet').showModal();
+    }
+
+    function saveTripSettings(e) {
+      e.preventDefault();
+      trip.title = $('#t-title').value.trim() || '我的旅行';
+      trip.currency = $('#t-currency').value;
+      save();
+      $('#trip-sheet').close();
+    }
+
+    function switchTrip(id) {
+      store.currentId = id;
+      trip = store.trips[id];
+      subscribe();
+      persist(); render();
+    }
+
+    $('#trip-list').addEventListener('click', e => {
+      const b = e.target.closest('[data-trip]');
+      if (!b) return;
+      switchTrip(b.dataset.trip);
+      $('#trip-sheet').close();
+    });
+
+    function newTrip() {
+      const t = normalize({ id: newId(), title: '新的行程', currency: trip.currency, days: [emptyDay(isoDate(new Date()))], updatedAt: Date.now() });
+      store.trips[t.id] = t;
+      switchTrip(t.id);
+      fillTripSheet();
+      $('#t-title').select();
+      toast('已建立新行程，先取個名字吧');
+    }
+
+    function deleteTrip() {
+      const msg = trip.cloud
+        ? `把「${trip.title}」從你的列表移除？\n（旅伴那邊的行程不受影響，之後用分享連結可再加回來）`
+        : `刪除「${trip.title}」？此動作無法復原。`;
+      if (!confirm(msg)) return;
+      delete store.trips[trip.id];
+      if (!Object.keys(store.trips).length) { const t = normalize({ title: '新的行程', days: [emptyDay(isoDate(new Date()))] }); store.trips[t.id] = t; }
+      switchTrip(Object.values(store.trips).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0].id);
+      $('#trip-sheet').close();
+    }
+
+    // ════════ 導航與分享 ════════
+    function openDayRoute() {
+      const spots = curDay().spots;
+      if (spots.length < 2) return toast('當天至少要有 2 個地點');
+      // ponytail: Google Maps 網址最多約 9 個途經點，超過會被截掉；需要更多再分段
+      const enc = s => encodeURIComponent(s.title);
+      let url = `https://www.google.com/maps/dir/?api=1&origin=${enc(spots[0])}&destination=${enc(spots.at(-1))}`;
+      const mid = spots.slice(1, -1);
+      if (mid.length) url += '&waypoints=' + mid.map(enc).join('%7C');
+      window.open(url, '_blank');
+    }
+
+    async function shareTrip() {
+      if (location.protocol === 'file:') return alert('目前是用電腦上的檔案開啟，別人點不開。\n請先照 README.md 把這個資料夾放到網路上（免費），再從網址開啟後分享。');
+      persist();
+      const url = shareLink();
+      const text = trip.cloud ? `【${trip.title}】點開就能一起編輯行程` : `【${trip.title}】行程表（副本）`;
+      if (navigator.share) {
+        try { return await navigator.share({ title: trip.title, text, url }); }
+        catch (e) { if (e.name === 'AbortError') return; }
+      }
+      try { await navigator.clipboard.writeText(url); toast('連結已複製，貼給朋友即可'); }
+      catch (e) { prompt('請手動複製連結：', url); }
+    }
+
+    // ════════ 啟動 ════════
+    persist();
+    render();
+    initCloud();
+    if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
+  </script>
+</body>
+</html>
